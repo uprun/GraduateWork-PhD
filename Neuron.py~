@@ -1,0 +1,87 @@
+import numpy as numpyLib
+import neurolab as neurolabLib
+import cv2
+import math
+from os import listdir
+from os.path import isfile, join
+from matplotlib import pyplot as plt
+
+imagesNames = [ f for f in listdir("./") if isfile(join("./",f)) and f.endswith(".png") ]
+
+
+#img = cv2.imread('messi5.jpg',0)
+img = cv2.imread('bblackLine.png',0)
+# Initiate STAR detector
+orb = cv2.ORB(1800)
+
+# find the keypoints with ORB
+kp = orb.detect(img,None)
+
+# compute the descriptors with ORB
+#kp, des = orb.compute(img, kp)
+mid_x = 0
+mid_y = 0
+min_x = 0
+min_y = 0
+max_x = 0
+max_y = 0
+if len(kp) > 0 :
+	mid_x = 0
+	mid_y = 0
+	min_x = kp[0].pt[0]
+	min_y = kp[0].pt[1]
+	max_x = min_x
+	max_y = min_y
+	for point in kp:
+		x = point.pt[0]
+		y = point.pt[1]
+		mid_x += x
+		mid_y += y
+		min_x = min(min_x, x)
+		min_y = min(min_y, y)
+		max_x = max(max_x, x)
+		max_y = max(max_y, y)
+	mid_x /= len(kp)
+	mid_y /= len(kp)
+	print mid_x, ":",  mid_y
+
+min_x = math.floor(min_x)
+min_y = math.floor(min_y)
+max_x = math.floor(max_x)
+max_y = math.floor(max_y)
+
+print min_x, min_y, max_x, max_y
+
+# draw only keypoints location,not size and orientation
+img2 = cv2.drawKeypoints(img,kp,color=(255,0,0), flags=0)
+#cv2.line(img2, (0, 0), (100, 100), (0, 255, 0), 4)
+cv2.line(img2, (min_x, min_y), (min_x, max_y), (0, 255, 0), 4)
+plt.imshow(img2),plt.show()
+
+
+
+
+#cv2.imshow('image',img)
+#k = cv2.waitKey(0) & 0xFF
+#if k == 27:         # wait for ESC key to exit
+#    cv2.destroyAllWindows()
+
+# Create train samples
+# train sum function
+input = numpyLib.random.uniform(-0.5, 0.5, (30, 2))
+target = (input[:, 0] + input[:, 1]).reshape(30, 1)
+# Create network with 2 inputs, 5 neurons in input layer
+# And 1 in output layer
+net = neurolabLib.net.newff([[-0.5, 0.5], [-0.5, 0.5]], [14, 1])
+# Train process
+err = net.train(input, target, show=42, epochs=1000, goal=0.0001)
+# Test
+res = net.sim([[0.2, 0.1]]) # 0.2 + 0.1
+print(res)
+# Plot result
+import pylab as pl
+pl.subplot(211)
+pl.plot(err)
+pl.xlabel('Epoch number')
+pl.ylabel('error (default SSE)')
+pl.show()
