@@ -124,6 +124,57 @@ def getPointsFromImage(image, size_of_ann, rotation_degrees = 0, verbose = False
     return result_vector.flatten('C')
 
 
+def shiftResultLocation(result, delta_x, delta_y):
+    (a, b, (x, y), c) = result
+    return (a, b, (x + delta_x, y + delta_y), c)
+
+
+def analyzeImage(image, size_of_ann, ann_net, verbose = False):
+    (rows, columns, _ ) = image.shape
+    print "Image shape: ",  image.shape
+    results = []
+    for degree in range(0, 360, 4) :
+        res = ann_net(
+            getPointsFromImage(image, size_of_ann, degree).reshape(1, size_of_ann * size_of_ann))
+        results.append((res, degree))
+        print imagePath," result: ", res, " degree: ",degree
+    maxResult = max(results,key=lambda (result,_): result)
+    (result, degree) = maxResult
+    analyzedObjects = []
+    if result > 0.7 :
+        analyzedObjects.append(("line", maxResult, (columns / 2, rows / 2), (columns, rows)))
+        return analyzedObjects
+    else :
+        if rows < size_of_ann and columns < size_of_ann :
+            analyzedObjects.append(("non_determined", maxResult, (columns / 2, rows / 2), (columns, rows) ))
+            return analyzedObjects
+        else :
+            print "Splitting image in four parts"
+            img_top_left = image [0: rows / 2 , 0: columns / 2]
+            results_top_left = analyzeImage(img_top_left, size_of_ann, ann_net, verbose)
+            analyzedObjects =  map(lambda x: shiftResultLocation(x,0 ,0), results_top_left ) + analyzedObjects
+            img_top_right = image [0: rows / 2 , columns / 2 + 1 : columns - 1]
+            results_top_right = analyzeImage(img_top_right, size_of_ann, ann_net, verbose)
+            analyzedObjects =  map(lambda x: shiftResultLocation(x, columns / 2 + 1,0), results_top_right ) + analyzedObjects
+            img_bottom_left = image [rows / 2 + 1 : rows - 1 , 0: columns / 2]
+            results_bottom_left = analyzeImage(img_bottom_left, size_of_ann, ann_net, verbose)
+            analyzedObjects =  map(lambda x: shiftResultLocation(x, 0 , rows / 2 + 1 ), results_bottom_left ) + analyzedObjects
+            img_bottom_right = image [ rows / 2 + 1 : rows - 1 , columns / 2 + 1 : columns - 1]
+            results_bottom_right = analyzeImage(img_bottom_right, size_of_ann, ann_net, verbose)
+            analyzedObjects =  map(lambda x: shiftResultLocation(x, columns / 2 + 1 , rows / 2 + 1 ), results_bottom_right ) + analyzedObjects
+            if verbose:
+                cv2.namedWindow("Part", cv2.CV_WINDOW_AUTOSIZE)
+                cv2.imshow("Part", img_top_left)
+                cv2.waitKey(0) & 0xFF
+                cv2.imshow("Part", img_top_right)
+                cv2.waitKey(0) & 0xFF
+                cv2.imshow("Part", img_bottom_left)
+                cv2.waitKey(0) & 0xFF
+                cv2.imshow("Part", img_bottom_right)
+                cv2.waitKey(0) & 0xFF
+                cv2.destroyWindow("Part")
+            return analyzedObjects
+
 imagesNames = [f for f in listdir("./") if isfile(join("./", f)) and
     (f.endswith(".png") or f.endswith(".jpg"))]
 learningImages = [f for f in imagesNames
@@ -131,6 +182,8 @@ learningImages = [f for f in imagesNames
                          f.startswith("failure_")]
 
 print imagesNames
+
+
 
 size_of_ann = 40
 count_of_images = len(learningImages)
@@ -151,34 +204,9 @@ net = loadnet("line.net")
 print("Starting testing:")
 # Test
 for imagePath in imagesNames:
-    results = []
     print "path: ", imagePath
     image = cv2.imread(imagePath, cv2.CV_LOAD_IMAGE_COLOR)
-    (rows, columns, _ ) = image.shape
-    img_top_left = image [0: rows / 2 , 0: columns / 2]
-    img_top_right = image [0: rows / 2 , columns / 2 + 1 : columns - 1]
-    img_bottom_left = image [rows / 2 + 1 : rows - 1 , 0: columns / 2]
-    img_bottom_right = image [ rows / 2 + 1 : rows - 1 , columns / 2 + 1 : columns - 1]
+    print "Analyze result: ", analyzeImage(image, size_of_ann, net)
 
-    cv2.namedWindow("Part", cv2.CV_WINDOW_AUTOSIZE)
-    cv2.imshow("Part", img_top_left)
-    cv2.waitKey(0) & 0xFF
-    cv2.imshow("Part", img_top_right)
-    cv2.waitKey(0) & 0xFF
-    cv2.imshow("Part", img_bottom_left)
-    cv2.waitKey(0) & 0xFF
-    cv2.imshow("Part", img_bottom_right)
-    cv2.waitKey(0) & 0xFF
-    cv2.destroyWindow("Part")
-
-    print "Image shape: ",  image.shape
-    for degree in range(0, 360, 4) :
-
-        res = net(
-            getPointsFromImage(image, size_of_ann, degree).reshape(1, size_of_ann * size_of_ann))
-        results.append((res, degree))
-        print imagePath," result: ", res, " degree: ",degree
-    filteredResults = filter(lambda (x, y): x > 0.7, results  )
-    print "Filtered results", filteredResults
 
 
