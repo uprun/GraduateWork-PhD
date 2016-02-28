@@ -66,18 +66,18 @@ def getPointsFromImage(image, size_of_ann, rotation_degrees = 0, verbose = False
             max_y = max(max_y, y)
         mid_x /= len(mergedPoints)
         mid_y /= len(mergedPoints)
-    max_dist_from_center = max(mid_x - min_x, max_x - mid_x, mid_y - min_y, max_y - mid_y)
-    ratio = size_of_ann / (2.0 * max_dist_from_center)
-    min_x_i = math.floor(min_x).__int__()
-    min_y_i = math.floor(min_y).__int__()
-    max_x_i = math.floor(max_x).__int__()
-    max_y_i = math.floor(max_y).__int__()
-    # draw only keypoints location,not size and orientation
-    img2 = img.copy()
-    cv2.line(img2, (min_x_i, min_y_i), (min_x_i, max_y_i), (0, 255, 0), 4)
-    cv2.line(img2, (min_x_i, min_y_i), (max_x_i, min_y_i), (0, 255, 0), 4)
-    cv2.line(img2, (max_x_i, max_y_i), (max_x_i, min_y_i), (0, 255, 0), 4)
-    cv2.line(img2, (min_x_i, max_y_i), (max_x_i, max_y_i), (0, 255, 0), 4)
+        max_dist_from_center = max(mid_x - min_x, max_x - mid_x, mid_y - min_y, max_y - mid_y)
+        ratio = size_of_ann / (2.0 * max_dist_from_center)
+        min_x_i = math.floor(min_x).__int__()
+        min_y_i = math.floor(min_y).__int__()
+        max_x_i = math.floor(max_x).__int__()
+        max_y_i = math.floor(max_y).__int__()
+        # draw only keypoints location,not size and orientation
+        img2 = img.copy()
+        cv2.line(img2, (min_x_i, min_y_i), (min_x_i, max_y_i), (0, 255, 0), 4)
+        cv2.line(img2, (min_x_i, min_y_i), (max_x_i, min_y_i), (0, 255, 0), 4)
+        cv2.line(img2, (max_x_i, max_y_i), (max_x_i, min_y_i), (0, 255, 0), 4)
+        cv2.line(img2, (min_x_i, max_y_i), (max_x_i, max_y_i), (0, 255, 0), 4)
 
     result_vector = numpyLib.zeros((size_of_ann , size_of_ann))
 
@@ -175,6 +175,22 @@ def analyzeImage(image, size_of_ann, ann_net, verbose = False):
                 cv2.destroyWindow("Part")
             return analyzedObjects
 
+def drawAnalyzedResults(image, results):
+    img2 = image.copy()
+    for item in results:
+        (name, (probability, degree), (center_x, center_y), (width, height)) = item
+        if name == "line" :
+            cv2.rectangle(img2,
+                (center_x - width / 2 , center_y - height / 2),
+                (center_x + width / 2, center_y + height / 2),
+                (0,0, 200)
+                )
+    cv2.namedWindow("AnalyzedObjects", cv2.CV_WINDOW_AUTOSIZE)
+    cv2.imshow("AnalyzedObjects", img2)
+    cv2.waitKey(0) & 0xFF
+    cv2.destroyWindow("AnalyzedObjects")
+
+
 imagesNames = [f for f in listdir("./") if isfile(join("./", f)) and
     (f.endswith(".png") or f.endswith(".jpg"))]
 learningImages = [f for f in imagesNames
@@ -206,7 +222,9 @@ print("Starting testing:")
 for imagePath in imagesNames:
     print "path: ", imagePath
     image = cv2.imread(imagePath, cv2.CV_LOAD_IMAGE_COLOR)
-    print "Analyze result: ", analyzeImage(image, size_of_ann, net)
+    analyzedObjects = analyzeImage(image, size_of_ann, net)
+    print "Analyze result: ", analyzedObjects
+    drawAnalyzedResults(image, analyzedObjects)
 
 
 
