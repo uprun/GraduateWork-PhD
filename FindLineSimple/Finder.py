@@ -22,7 +22,7 @@ def getGradientPointsFromImage(image):
     return [(a[1], a[0]) for a in zip(*nonZeroPoints)]
 
 
-def getPoints(image, getGradientPoints=True, getORBKeyPoints=True):
+def getKeyPoints(image, getGradientPoints=True, getORBKeyPoints=True):
     img = image
     mergedPoints = []
     if getGradientPoints:
@@ -40,21 +40,22 @@ def getPoints(image, getGradientPoints=True, getORBKeyPoints=True):
     return mergedPoints
 
 
-def getPointsForAnn(image, size_of_ann, verbose=False):
-    img = image
+def getPointsForAnn(keyPointsOfImage,
+        size_of_ann,
+        verbose=False,
+        verboseOriginalImage=None):
 
-    mergedPoints = getPoints(img)
+    mergedPoints = keyPointsOfImage
     mid_x = 0
     mid_y = 0
     min_x = 0
     min_y = 0
     max_x = 0
     max_y = 0
+    ratio = 1.0
+    max_dist_from_center = 1
     if len(mergedPoints) > 0:
         print "points found: ", len(mergedPoints)
-        rows = img.shape[0]
-        cols = img.shape[1]
-        print "rows: ", rows, " cols: ", cols
         mid_x = 0
         mid_y = 0
         min_x = mergedPoints[0][0]
@@ -72,8 +73,21 @@ def getPointsForAnn(image, size_of_ann, verbose=False):
             max_y = max(max_y, y)
         mid_x /= len(mergedPoints)
         mid_y /= len(mergedPoints)
-        max_dist_from_center = max(mid_x - min_x, max_x - mid_x, mid_y - min_y, max_y - mid_y)
-        ratio = size_of_ann / (2.0 * max_dist_from_center)
+        max_dist_from_center = max(
+                                mid_x - min_x,
+                                max_x - mid_x,
+                                mid_y - min_y,
+                                max_y - mid_y)
+        # for case when there is only one point we don't need to zoom it
+        if max_dist_from_center == 0:
+            ratio = 1
+        else:
+            # if bounding rectangle around points can fit into ANN
+            # we also calucalate ratio
+            if 2 * max_dist_from_center < size_of_ann:
+                ratio = size_of_ann / (2.0 * max_dist_from_center)
+            else:
+                ratio = size_of_ann / (2.0 * max_dist_from_center)
 
     result_vector = numpyLib.zeros((size_of_ann, size_of_ann))
     img2 = None
@@ -82,8 +96,7 @@ def getPointsForAnn(image, size_of_ann, verbose=False):
         min_y_i = math.floor(min_y).__int__()
         max_x_i = math.floor(max_x).__int__()
         max_y_i = math.floor(max_y).__int__()
-        # draw only keypoints location,not size and orientation
-        img2 = img.copy()
+        img2 = verboseOriginalImage.copy()
         cv2.line(img2, (min_x_i, min_y_i), (min_x_i, max_y_i), (0, 255, 0), 4)
         cv2.line(img2, (min_x_i, min_y_i), (max_x_i, min_y_i), (0, 255, 0), 4)
         cv2.line(img2, (max_x_i, max_y_i), (max_x_i, min_y_i), (0, 255, 0), 4)
@@ -105,6 +118,7 @@ def getPointsForAnn(image, size_of_ann, verbose=False):
         ix = max(0, ix)
         iy = max(0, iy)
         if verbose:
+            #draw key points locations
             cv2.circle(img2, (ix, iy), 1, (0, 255, 0))
             cv2.circle(
                  img2,
@@ -136,66 +150,122 @@ def applyANN(size_of_ann,
         flatten('C').
         reshape(1, size_of_ann * size_of_ann))
 
-def shiftResultLocation(result, delta_x, delta_y):
-    (a, b, (x, y), c) = result
-    return (a, b, (x + delta_x, y + delta_y), c)
+
+def subAnalyzeImage(keyPoints, size_of_ann, ann_net, topLeftPoint,
+        bottomRightPoint,
+        verbose=False):
+    (columns_start, rows_start) = topLeftPoint
+    (columns_end, rows_end) = bottomRightPoint
+    columns = columns_end - columns_start + 1
+    rows = rows_end - rows_start + 1
+    analyzedObjects = []
+    if len(keyPoints) == 0:
+        analyzedObjects.append(
+                ("non_determined",
+                (1.0, 0.0),
+                topLeftPoint,
+                bottomRightPoint,
+                keyPoints
+                )
+            )
+        return analyzedObjects
+    else:
+        results = []
+        pointsForAnn = getPointsForAnn(keyPoints, size_of_ann)
+        for degree in range(0, 360, 4) :
+            res = applyANN(size_of_ann, ann_net, pointsForAnn, degree)
+            results.append((res, degree))
+            if verbose:
+                print imagePath," result: ", res, " degree: ",degree
+        maxResult = max(results,key=lambda (result,_): result)
+        (result, degree) = maxResult
+        if result > 0.5:
+            print "accepted as line result: ", result, " degree: ",degree
+            analyzedObjects.append(
+                    ("line",
+                    maxResult,
+                    topLeftPoint,
+                    bottomRightPoint,
+                    keyPoints
+                    )
+                )
+            return analyzedObjects
+        else:
+            if rows < 5 and columns < 5:
+                analyzedObjects.append(
+                        ("non_determined",
+                        maxResult,
+                        topLeftPoint,
+                        bottomRightPoint,
+                        keyPoints
+                        )
+                    )
+                return analyzedObjects
+            else:
+                print "Splitting points in four parts"
+                columns_mid = (columns_start + columns_end) / 2
+                rows_mid = (rows_start + rows_end) / 2
+                points_top_left = [point for point in keyPoints
+                    if point[0] < columns_mid and
+                        point[1] < rows_mid]
+                results_top_left = subAnalyzeImage(points_top_left, size_of_ann,
+                     ann_net,
+                     topLeftPoint,
+                     (columns_mid, rows_mid), verbose)
+                analyzedObjects = results_top_left + analyzedObjects
+                points_top_right = [point for point in keyPoints
+                    if point[0] >= columns_mid and
+                        point[1] < rows_mid]
+                results_top_right = subAnalyzeImage(points_top_right,
+                    size_of_ann,
+                    ann_net,
+                    (columns_mid, rows_start),
+                    (columns_end, rows_mid),
+                    verbose)
+                analyzedObjects = results_top_right + analyzedObjects
+                points_bottom_left = [point for point in keyPoints
+                    if point[0] < columns_mid and
+                        point[1] >= rows_mid]
+                results_bottom_left = subAnalyzeImage(points_bottom_left,
+                     size_of_ann,
+                     ann_net,
+                     (columns_start, rows_mid),
+                     (columns_mid, rows_end),
+                     verbose)
+                analyzedObjects = results_bottom_left + analyzedObjects
+                points_bottom_right = [point for point in keyPoints
+                    if point[0] >= columns_mid and
+                        point[1] >= rows_mid]
+                results_bottom_right = subAnalyzeImage(points_bottom_right,
+                    size_of_ann,
+                    ann_net,
+                    (columns_mid, rows_mid),
+                    bottomRightPoint,
+                    verbose)
+                analyzedObjects = results_bottom_right + analyzedObjects
+                return analyzedObjects
+
 
 
 def analyzeImage(image, size_of_ann, ann_net, verbose = False):
     (rows, columns, _ ) = image.shape
     print "Image shape: ",  image.shape
-    results = []
-    points = getPointsForAnn(image, size_of_ann)
-    for degree in range(0, 360, 4) :
-        res = applyANN(size_of_ann, ann_net, points, degree)
-        results.append((res, degree))
-        print imagePath," result: ", res, " degree: ",degree
-    maxResult = max(results,key=lambda (result,_): result)
-    (result, degree) = maxResult
-    analyzedObjects = []
-    if result > 0.7 :
-        analyzedObjects.append(("line", maxResult, (columns / 2, rows / 2), (columns, rows)))
-        return analyzedObjects
-    else :
-        if rows < size_of_ann and columns < size_of_ann :
-            analyzedObjects.append(("non_determined", maxResult, (columns / 2, rows / 2), (columns, rows) ))
-            return analyzedObjects
-        else :
-            print "Splitting image in four parts"
-            img_top_left = image [0: rows / 2 , 0: columns / 2]
-            results_top_left = analyzeImage(img_top_left, size_of_ann, ann_net, verbose)
-            analyzedObjects =  map(lambda x: shiftResultLocation(x,0 ,0), results_top_left ) + analyzedObjects
-            img_top_right = image [0: rows / 2 , columns / 2 + 1 : columns - 1]
-            results_top_right = analyzeImage(img_top_right, size_of_ann, ann_net, verbose)
-            analyzedObjects =  map(lambda x: shiftResultLocation(x, columns / 2 + 1,0), results_top_right ) + analyzedObjects
-            img_bottom_left = image [rows / 2 + 1 : rows - 1 , 0: columns / 2]
-            results_bottom_left = analyzeImage(img_bottom_left, size_of_ann, ann_net, verbose)
-            analyzedObjects =  map(lambda x: shiftResultLocation(x, 0 , rows / 2 + 1 ), results_bottom_left ) + analyzedObjects
-            img_bottom_right = image [ rows / 2 + 1 : rows - 1 , columns / 2 + 1 : columns - 1]
-            results_bottom_right = analyzeImage(img_bottom_right, size_of_ann, ann_net, verbose)
-            analyzedObjects =  map(lambda x: shiftResultLocation(x, columns / 2 + 1 , rows / 2 + 1 ), results_bottom_right ) + analyzedObjects
-            if verbose:
-                cv2.namedWindow("Part", cv2.CV_WINDOW_AUTOSIZE)
-                cv2.imshow("Part", img_top_left)
-                cv2.waitKey(0) & 0xFF
-                cv2.imshow("Part", img_top_right)
-                cv2.waitKey(0) & 0xFF
-                cv2.imshow("Part", img_bottom_left)
-                cv2.waitKey(0) & 0xFF
-                cv2.imshow("Part", img_bottom_right)
-                cv2.waitKey(0) & 0xFF
-                cv2.destroyWindow("Part")
-            return analyzedObjects
+    keyPoints = getKeyPoints(image)
+    return subAnalyzeImage(keyPoints, size_of_ann, ann_net, (0, 0), (columns - 1, rows -1))
 
 def drawAnalyzedResults(image, results):
     img2 = image.copy()
     for item in results:
-        (name, (probability, degree), (center_x, center_y), (width, height)) = item
-        if name == "line" :
+        (name,
+            (probability, degree),
+            top_left_point,
+            bottom_right_point,
+            keyPoints) = item
+        if name == "line":
             cv2.rectangle(img2,
-                (center_x - width / 2 , center_y - height / 2),
-                (center_x + width / 2, center_y + height / 2),
-                (0,0, 200)
+                top_left_point,
+                bottom_right_point,
+                (200, 0, 0)
                 )
     cv2.namedWindow("AnalyzedObjects", cv2.CV_WINDOW_AUTOSIZE)
     cv2.imshow("AnalyzedObjects", img2)
@@ -227,7 +297,7 @@ print count_of_images
 # Create network with 2 inputs, 5 neurons in input layer
 # And 1 in output layer
 from ffnet import loadnet
-print("Loadting artificial neuron network:")
+print("Loading artificial neuron network:")
 net = loadnet("line.net")
 print("Starting testing:")
 # Test
@@ -236,7 +306,7 @@ for imagePath in imagesNames:
     image = cv2.imread(imagePath, cv2.CV_LOAD_IMAGE_COLOR)
     analyzedObjects = analyzeImage(image, size_of_ann, net)
     print "Analyze result: ", analyzedObjects
-    drawAnalyzedResults(image, analyzedObjects)
+    drawAnalyzedResults(image, results=analyzedObjects)
 
 
 
