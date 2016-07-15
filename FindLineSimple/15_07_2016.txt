@@ -1,0 +1,22 @@
+['test_success_broken_line.jpg', 'test_success_line_rotated_90_degrees.png', 'test_success_square_and_line.jpg', 'triangle.png', 'test_success_lines_from_high_zoom_.jpg', '1thin_line_success.png']
+0
+Loading artificial neuron network:
+Starting testing:
+path:  test_success_broken_line.jpg
+Calculating gradient points
+. . . . . . . . . . . . . . . . . * . . . . . . . . . . . . . . * . * . . * . . . . . . . . . . * . * . * . . . . . . . . . * . * . * . . . . . . . . . . . . . . . . findLines total time:  15.5431630611
+path:  test_success_line_rotated_90_degrees.png
+Calculating gradient points
+. . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . findLines total time:  8.9046869278
+path:  test_success_square_and_line.jpg
+Calculating gradient points
+. . * . * . * . * . * . . . . * . * . * . * . . . . . . * . * . . * . * . . . * . . . . . . . * . * . * . * . * . * . * . * . * . . * . * . * . * . * . . * . * . * . * . * . . * . * . * . * . * . * . * . * . * . . . * . * . * . * . * . . . * . * . * . * . . . . * . * . * . * . * . * . * . * . * . . . . . . . . . . . * . * . * . * . . . . . * . * . * . * . * . . . . . findLines total time:  23.3178369999
+path:  triangle.png
+Calculating gradient points
+. . . . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . . . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . . . * . * . * findLines total time:  15.3248209953
+path:  test_success_lines_from_high_zoom_.jpg
+Calculating gradient points
+. . . . . . * . . * . * . * . * . * . * . * . * . . * . * . . . * . * . * . * . * . * . . * . * . * . . * . . . * . . * . . * . . * . . . * . . * . . . . * . . * . * . * . . . * . * . . . . * . * . * . . * . * . * . . * . * . * . . * . * . * . * . * . * . * . * . * . * . * . . * . . * . . * . * . * . * . * . * . * . * . . . . * . * . . * . * . * . . * . * . * . . * . * . * . * . * . * . . * . . * . . . * . . * . . * . . * . . * . . . . . * findLines total time:  28.0591888428
+path:  1thin_line_success.png
+Calculating gradient points
+. . * . * . * . * . * . * . * . * . * . * . . * . . * . * . * . . . . . . . * . . . * . * . . . * . . . . . . . * . * . . . * . * . * . . . * . * . . . . * . . . . . . . . . * . . . * . * . * . * . * . * . * . * . * . * . * . . * . * . . * . * . * . . * . * . . . . . * . * . * . * . * . * . * . * . . . * . * . * . * . * . * . * . * . * . * . * . * . . * . * . . * . * . * . * . . * . . * . * . * . * . * . . . * . * . * . . . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . * . . . * . * . * . . * . . . findLines total time:  33.7460758686

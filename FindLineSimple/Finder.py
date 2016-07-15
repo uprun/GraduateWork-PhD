@@ -3,6 +3,8 @@ import cv2
 import math
 from os import listdir
 from os.path import isfile, join
+import timeit
+import sys
 
 
 def getGradientPointsFromImage(image, verbose=False):
@@ -14,9 +16,7 @@ def getGradientPointsFromImage(image, verbose=False):
     grad_approx = cv2.addWeighted(abs_dx, 0.5, abs_dy, 0.5, 0)
     if verbose:
         cv2.namedWindow("gradient", cv2.CV_WINDOW_AUTOSIZE)
-        cv2.imshow("gradient",grad_approx)
-        cv2.waitKey(0) & 0xFF
-        cv2.destroyWindow("gradient")
+        cv2.imshow("gradient", grad_approx)
     averageValue = numpyLib.average(grad_approx)
     nonZeroPoints = numpyLib.nonzero(grad_approx > averageValue * 0.95)
 
@@ -48,7 +48,6 @@ def getBoundingRectangle(points):
     max_x = 0
     max_y = 0
     if len(points) > 0:
-        print "points found: ", len(points)
         min_x = points[0][0]
         min_y = points[0][1]
         max_x = min_x
@@ -64,7 +63,6 @@ def getBoundingRectangle(points):
 
 def enlargeBoundingRectangle(points, min_x, min_y, max_x, max_y):
     if len(points) > 0:
-        print "points found: ", len(points)
         for point in points:
             x = point[0]
             y = point[1]
@@ -93,7 +91,6 @@ def getPointsForAnn(keyPointsOfImage,
     ratio = 1.0
     max_dist_from_center = 1
     if len(mergedPoints) > 0:
-        print "points found: ", len(mergedPoints)
         mid_x = 0
         mid_y = 0
         min_x = mergedPoints[0][0]
@@ -245,7 +242,8 @@ def subAnalyzeImage(keyPoints, size_of_ann, ann_net,
             cv2.waitKey(0) & 0xFF
             cv2.destroyWindow("PointsToAnalyze")
         if result >= 0.7:
-            print "accepted as line result: ", result, " degree: ",degree
+            #print "accepted as line result: ", result, " degree: ",degree
+            print '*',
             analyzedObjects.append(
                     ("line",
                     maxResult,
@@ -347,16 +345,36 @@ def near(point, set, distance=1):
         return max(abs(pA[0] - pB[0]), abs(pA[1] - pB[1]))
     return any(mod_dist(point, p) <= distance for p in set)
 
+def isPointAnExtension(x, y, pointsMatrix):
+    return x >= 0 and y >= 0 and x < pointsMatrix.shape[1] and y < pointsMatrix.shape[0] and pointsMatrix[y][x] > 0.5 and pointsMatrix[y][x] < 1.5
 
-def enlargeSetByNearPoints(setToEnlarge, setOfPoints):
-    extensionSet = [x for x in setOfPoints if near(x, setToEnlarge)]
-    remainingSet = [x for x in setOfPoints if not near(x, setToEnlarge)]
-    return (extensionSet, remainingSet)
+def addIfExtension(bufX, bufY, pointsMatrix, accumulator):
+    if isPointAnExtension(bufX, bufY, pointsMatrix):
+        pointsMatrix[bufY][bufX] = 2
+        accumulator = [(bufX, bufY)] + accumulator
+    return accumulator
+
+def enlargeSetByNearPoints(setToEnlarge, pointsMatrix):
+    extensionSet = []
+    for point in setToEnlarge:
+        x = point[0]
+        y = point[1]
+        extensionSet = addIfExtension(x - 1, y - 1, pointsMatrix, extensionSet)
+        extensionSet = addIfExtension(x, y - 1, pointsMatrix, extensionSet)
+        extensionSet = addIfExtension(x + 1, y - 1, pointsMatrix, extensionSet)
+        extensionSet = addIfExtension(x - 1, y, pointsMatrix, extensionSet)
+        extensionSet = addIfExtension(x + 1, y, pointsMatrix, extensionSet)
+        extensionSet = addIfExtension(x - 1, y + 1, pointsMatrix, extensionSet)
+        extensionSet = addIfExtension(x, y + 1, pointsMatrix, extensionSet)
+        extensionSet = addIfExtension(x + 1, y + 1, pointsMatrix, extensionSet)
+    return extensionSet
 
 
-def enlargeSetByNearPointsForSize(size, setToEnlarge, setOfPoints):
-    accumulator = []
+def enlargeSetByNearPointsForSize(size, setToEnlarge,
+     pointsMatrix):
 
+    for point in setToEnlarge:
+        pointsMatrix[point[1]][point[0]] = 2.0
     min_x = 0
     min_y = 0
     max_x = 0
@@ -364,44 +382,66 @@ def enlargeSetByNearPointsForSize(size, setToEnlarge, setOfPoints):
     ((min_x, min_y), (max_x, max_y)) = getBoundingRectangle(
         setToEnlarge
         )
+    accumulator = []
     while True:
         accumulator = setToEnlarge + accumulator
         ((min_x, min_y), (max_x, max_y)) = enlargeBoundingRectangle(
             setToEnlarge,
             min_x, min_y, max_x, max_y)
         if max_x - min_x >= size or max_y - min_y >= size:
-            return (accumulator, setOfPoints)
-        (newSetToEnlarge, newRemainingSet) = enlargeSetByNearPoints(
+            return accumulator
+        newSetToEnlarge = enlargeSetByNearPoints(
             setToEnlarge,
-            setOfPoints)
+            pointsMatrix)
         if len(newSetToEnlarge) == 0:
-            return (accumulator, setOfPoints)
+            return accumulator
         setToEnlarge = newSetToEnlarge
-        setOfPoints = newRemainingSet
 
 
-def findLines(image, size_of_ann, ann_net, verbose = False):
+def findLines(image, size_of_ann, ann_net, verbose=False):
+    function_start_time = timeit.default_timer()
+    height, width, _ = image.shape
+
+    pointsMatrix = numpyLib.zeros((height, width))
+    removedPointsMatrix = numpyLib.zeros((height, width))
     keyPoints = getKeyPoints(image,
         getORBKeyPoints=False,
-        getGradientPoints = True)
+        getGradientPoints=True)
+    for point in keyPoints:
+        pointsMatrix[point[1]][point[0]] = 1.0
     result = []
     remainingPoints = keyPoints
-    while len(remainingPoints) != 0:
-        pointToStartFrom = remainingPoints[0]
-        (pointsToAnalyze, _) = enlargeSetByNearPointsForSize(
-            size_of_ann ,
+    for pointToStartFrom in remainingPoints:
+        if(removedPointsMatrix[pointToStartFrom[1]][pointToStartFrom[0]] > 0.5):
+            continue
+        print '.',
+        sys.stdout.flush()
+        #start_time = timeit.default_timer()
+        pointsToAnalyze = enlargeSetByNearPointsForSize(
+            size_of_ann,
             [pointToStartFrom],
-            keyPoints)
-        pointsToRemove = [x for x in pointsToAnalyze
-            if near(x, [pointToStartFrom], distance=10)]
-        remainingPoints = [x for x in remainingPoints
-            if not near(x, pointsToRemove, distance=0)]
+            pointsMatrix)
+        for point in pointsToAnalyze:
+            pointsMatrix[point[1]][point[0]] = 1.0
+        pointsToRemove = enlargeSetByNearPointsForSize(
+            size_of_ann / 2,
+            [pointToStartFrom],
+            pointsMatrix)
+        for point in pointsToRemove:
+            removedPointsMatrix[point[1]][point[0]] = 1.0
+            pointsMatrix[point[1]][point[0]] = 1.0
+
         combinedResult = subAnalyzeImage(pointsToAnalyze,
                     size_of_ann, ann_net,
                     splitPointsInFourParts=False, verbose=verbose,
                     originalImage=image)
+
         result = [x for x in combinedResult
                     if x[0] == "line"] + result
+        #elapsed = timeit.default_timer() - start_time
+        #print "findLines iteration time: ", elapsed
+    elapsed = timeit.default_timer() - function_start_time
+    print "findLines total time: ", elapsed
     return result
 
 
@@ -425,6 +465,7 @@ def drawAnalyzedResults(image, results):
     cv2.imshow("AnalyzedObjects", img2)
     cv2.waitKey(0) & 0xFF
     cv2.destroyWindow("AnalyzedObjects")
+    cv2.destroyAllWindows()
 
 
 def tryToCombineLines(results, size_of_ann, ann_net):
