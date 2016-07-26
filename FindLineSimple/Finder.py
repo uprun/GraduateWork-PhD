@@ -498,6 +498,56 @@ def tryToCombineLines(results, size_of_ann, ann_net):
     return result
 
 
+def saveAnalyzedObjectsToFile(imagePath, analyzedObjects):
+    with open(imagePath + '_analyzedObjects.txt', 'wb') as f:
+        pickle.dump(analyzedObjects, f)
+
+def drawLineAndCountSharedPoints(pointsMatrix, points):
+    count = 0
+    for p in points:
+        pointsMatrix[p[1]][p[0]] += 1.0
+        if pointsMatrix[p[1]][p[0]] > 1.1:
+            count += 1
+    return count
+
+def clearLine(pointsMatrix, points):
+    for p in points:
+        pointsMatrix[p[1]][p[0]] -= 1.0
+        if pointsMatrix[p[1]][p[0]] < 0.1:
+            pointsMatrix[p[1]][p[0]] = 0
+
+
+def combineLines(analyzedObjects, analyzedLines, pointsMatrix):
+    if len(analyzedObjects) > 0:
+        first, rest = analyzedObjects[0], analyzedObjects[1:]
+        drawLineAndCountSharedPoints(pointsMatrix, first[4])
+        toAnalyzeFuther = []
+        for line in rest:
+            sharedPoints = drawLineAndCountSharedPoints(pointsMatrix, line[4])
+            if sharedPoints > len(line[4]) / 4:
+                (topLeft, bottomRight) = enlargeBoundingRectangle(
+                    line[4],
+                    first[2][0],
+                    first[2][1],
+                    first[3][0],
+                    first[3][1]
+                    )
+                first = (
+                    "line",
+                    first[1],
+                    topLeft,
+                    bottomRight,
+                    line[4] + first[4]
+                    )
+            else:
+                clearLine(pointsMatrix, line[4])
+                toAnalyzeFuther.append(line)
+        analyzedLines.append(first)
+        clearLine(pointsMatrix, first[4])
+        return combineLines(toAnalyzeFuther, analyzedLines, pointsMatrix)
+    else:
+        return analyzedLines
+
 
 
 imagesNames = [f for f in listdir("./") if isfile(join("./", f)) and
@@ -524,10 +574,12 @@ for imagePath in imagesNames:
     print "path: ", imagePath
     image = cv2.imread(imagePath, cv2.CV_LOAD_IMAGE_COLOR)
     analyzedObjects = findLines(image, size_of_ann, net, verbose=False)
-    #print "Analyze result: ", analyzedObjects
     drawAnalyzedResults(image, results=analyzedObjects)
-    with open(imagePath + '_analyzedObjects.txt', 'wb') as f:
-        pickle.dump(analyzedObjects, f)
+    height, width, _ = image.shape
+    pointsMatrix = numpyLib.zeros((height, width))
+    lines = combineLines(analyzedObjects, [], pointsMatrix)
+    drawAnalyzedResults(image, results=lines)
+
     #combinedObjects = tryToCombineLines(analyzedObjects, size_of_ann, net)
     #drawAnalyzedResults(image, results=combinedObjects)
 
