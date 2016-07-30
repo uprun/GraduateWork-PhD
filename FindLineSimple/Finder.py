@@ -448,6 +448,7 @@ def findLines(image, size_of_ann, ann_net, verbose=False):
 
 
 def drawAnalyzedResults(image, results):
+    cv2.destroyWindow("AnalyzedObjects")
     img2 = image.copy()
     for item in results:
         (name,
@@ -461,6 +462,12 @@ def drawAnalyzedResults(image, results):
                 bottom_right_point,
                 (200, 0, 0)
                 )
+            for point in keyPoints:
+                cv2.circle(img2,
+                    point,
+                    1,
+                    (0, 0, 200)
+                    )
     cv2.namedWindow("AnalyzedObjects", cv2.CV_WINDOW_AUTOSIZE)
     cv2.imshow("AnalyzedObjects", img2)
     cv2.waitKey(0) & 0xFF
@@ -506,7 +513,7 @@ def drawLineAndCountSharedPoints(pointsMatrix, points):
     count = 0
     for p in points:
         pointsMatrix[p[1]][p[0]] += 1.0
-        if pointsMatrix[p[1]][p[0]] > 1.1:
+        if pointsMatrix[p[1]][p[0]] > 1.1 and pointsMatrix[p[1]][p[0]] < 2.1:
             count += 1
     return count
 
@@ -517,34 +524,60 @@ def clearLine(pointsMatrix, points):
             pointsMatrix[p[1]][p[0]] = 0
 
 
-def combineLines(analyzedObjects, analyzedLines, pointsMatrix):
+def combineLines(analyzedObjects,
+    analyzedLines,
+    pointsMatrix,
+    image,
+    size_of_ann,
+    ann_net):
     if len(analyzedObjects) > 0:
         first, rest = analyzedObjects[0], analyzedObjects[1:]
         drawLineAndCountSharedPoints(pointsMatrix, first[4])
         toAnalyzeFuther = []
+        foundOnePair = False
         for line in rest:
             sharedPoints = drawLineAndCountSharedPoints(pointsMatrix, line[4])
-            if sharedPoints > len(line[4]) / 4:
-                (topLeft, bottomRight) = enlargeBoundingRectangle(
-                    line[4],
-                    first[2][0],
-                    first[2][1],
-                    first[3][0],
-                    first[3][1]
-                    )
-                first = (
-                    "line",
-                    first[1],
-                    topLeft,
-                    bottomRight,
-                    line[4] + first[4]
-                    )
+            print "Shared points: ", sharedPoints
+            drawAnalyzedResults(image, [first, line])
+            #if sharedPoints > len(line[4]) / 5:
+            if sharedPoints > 10:
+                resultAnalyzedOneLine = subAnalyzeImage(line[4] + first[4],
+                    size_of_ann, ann_net,
+                    splitPointsInFourParts=False, verbose=False,
+                    originalImage=image)
+                if len(resultAnalyzedOneLine) == 0:
+                    print "Non merged 2"
+                    clearLine(pointsMatrix, line[4])
+                    toAnalyzeFuther.append(line)
+                else:
+                    print "Merged,"
+                    print "count of lines found: ", len(resultAnalyzedOneLine)
+                    (topLeft, bottomRight) = enlargeBoundingRectangle(
+                        line[4],
+                        first[2][0],
+                        first[2][1],
+                        first[3][0],
+                        first[3][1]
+                        )
+                    first = (
+                        "line",
+                        first[1],
+                        topLeft,
+                        bottomRight,
+                        line[4] + first[4]
+                        )
+                    foundOnePair = True
             else:
+                print "Non merged"
                 clearLine(pointsMatrix, line[4])
                 toAnalyzeFuther.append(line)
-        analyzedLines.append(first)
         clearLine(pointsMatrix, first[4])
-        return combineLines(toAnalyzeFuther, analyzedLines, pointsMatrix)
+        if foundOnePair:
+            toAnalyzeFuther.append(first)
+        else:
+            analyzedLines.append(first)
+        return combineLines(toAnalyzeFuther, analyzedLines, pointsMatrix,
+            image, size_of_ann, ann_net)
     else:
         return analyzedLines
 
@@ -575,10 +608,16 @@ for imagePath in imagesNames:
     image = cv2.imread(imagePath, cv2.CV_LOAD_IMAGE_COLOR)
     analyzedObjects = findLines(image, size_of_ann, net, verbose=False)
     drawAnalyzedResults(image, results=analyzedObjects)
+    #for d in analyzedObjects:
+    #    drawAnalyzedResults(image, results=[d])
     height, width, _ = image.shape
     pointsMatrix = numpyLib.zeros((height, width))
-    lines = combineLines(analyzedObjects, [], pointsMatrix)
+    lines = combineLines(analyzedObjects, [], pointsMatrix, image,
+        size_of_ann, net)
+    for line in lines:
+        print line[2], line[3], len(line[4])
     drawAnalyzedResults(image, results=lines)
+
 
     #combinedObjects = tryToCombineLines(analyzedObjects, size_of_ann, net)
     #drawAnalyzedResults(image, results=combinedObjects)
