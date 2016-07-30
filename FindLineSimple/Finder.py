@@ -523,6 +523,16 @@ def clearLine(pointsMatrix, points):
         if pointsMatrix[p[1]][p[0]] < 0.1:
             pointsMatrix[p[1]][p[0]] = 0
 
+def removeDublicatePointsFromLine(pointsMatrix, points):
+    result = []
+    for p in points:
+        if pointsMatrix[p[1]][p[0]] > 0.1:
+            result.append(p)
+            pointsMatrix[p[1]][p[0]] = 0
+    for p in result:
+        pointsMatrix[p[1]][p[0]] = 1
+    return result
+
 
 def combineLines(analyzedObjects,
     analyzedLines,
@@ -545,12 +555,14 @@ def combineLines(analyzedObjects,
                     size_of_ann, ann_net,
                     splitPointsInFourParts=False, verbose=False,
                     originalImage=image)
+                resultAnalyzedOneLine = [x for x in resultAnalyzedOneLine
+                    if x[0] == "line"]
                 if len(resultAnalyzedOneLine) == 0:
-                    print "Non merged 2"
+                    print "Not merged , because pair is not a line"
                     clearLine(pointsMatrix, line[4])
                     toAnalyzeFuther.append(line)
                 else:
-                    print "Merged,"
+                    print "Merged, because ",
                     print "count of lines found: ", len(resultAnalyzedOneLine)
                     (topLeft, bottomRight) = enlargeBoundingRectangle(
                         line[4],
@@ -559,16 +571,18 @@ def combineLines(analyzedObjects,
                         first[3][0],
                         first[3][1]
                         )
+                    combinedPoints = removeDublicatePointsFromLine(pointsMatrix,
+                        line[4] + first[4])
                     first = (
                         "line",
                         first[1],
                         topLeft,
                         bottomRight,
-                        line[4] + first[4]
+                        combinedPoints
                         )
                     foundOnePair = True
             else:
-                print "Non merged"
+                print "Not merged"
                 clearLine(pointsMatrix, line[4])
                 toAnalyzeFuther.append(line)
         clearLine(pointsMatrix, first[4])
