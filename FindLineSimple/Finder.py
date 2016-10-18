@@ -450,7 +450,18 @@ def findLines(image, size_of_ann, ann_net, verbose=False):
 def drawAnalyzedResults(image, results):
     cv2.destroyWindow("AnalyzedObjects")
     img2 = image.copy()
+    i = 0
     for item in results:
+        i+=1
+        r = 0
+        g = 0
+        b = 0
+        if i % 3 == 0:
+            r = 200
+        if i % 3 == 1:
+            g = 200
+        if i % 3 == 2:
+            b = 200
         (name,
             (probability, degree),
             top_left_point,
@@ -466,7 +477,7 @@ def drawAnalyzedResults(image, results):
                 cv2.circle(img2,
                     point,
                     1,
-                    (0, 0, 200)
+                    (b, g, r)
                     )
     cv2.namedWindow("AnalyzedObjects", cv2.CV_WINDOW_AUTOSIZE)
     cv2.imshow("AnalyzedObjects", img2)
@@ -548,8 +559,7 @@ def combineLines(analyzedObjects,
         for line in rest:
             sharedPoints = drawLineAndCountSharedPoints(pointsMatrix, line[4])
             print "Shared points: ", sharedPoints
-            drawAnalyzedResults(image, [first, line])
-            #if sharedPoints > len(line[4]) / 5:
+            #drawAnalyzedResults(image, [first, line])
             if sharedPoints > 10:
                 resultAnalyzedOneLine = subAnalyzeImage(line[4] + first[4],
                     size_of_ann, ann_net,
@@ -624,12 +634,15 @@ for imagePath in imagesNames:
     drawAnalyzedResults(image, results=analyzedObjects)
     #for d in analyzedObjects:
     #    drawAnalyzedResults(image, results=[d])
+    function_start_time = timeit.default_timer()
     height, width, _ = image.shape
     pointsMatrix = numpyLib.zeros((height, width))
     lines = combineLines(analyzedObjects, [], pointsMatrix, image,
         size_of_ann, net)
     for line in lines:
         print line[2], line[3], len(line[4])
+    elapsed = timeit.default_timer() - function_start_time
+    print "time to combine lines: ", elapsed, " s"
     drawAnalyzedResults(image, results=lines)
 
 
