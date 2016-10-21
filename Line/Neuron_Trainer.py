@@ -148,7 +148,7 @@ boundaries[:, 1] = numpyLib.ones((size_of_ann * size_of_ann, 1)).reshape((size_o
 # And 1 in output layer
 from ffnet import ffnet, mlgraph, savenet
 print("Starting train of neural network:")
-conec = mlgraph((size_of_ann * size_of_ann,size_of_ann * 5 ,size_of_ann,1))
+conec = mlgraph((size_of_ann * size_of_ann, size_of_ann * 5 ,size_of_ann,1))
 net = ffnet(conec)
 
 # Train process
