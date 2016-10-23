@@ -164,6 +164,10 @@ def getPointsForAnn(keyPointsOfImage,
                  (255, 0, 0))
         result_vector[iy, ix] = 1
     if verbose:
+        cv2.line(img2, (0, 0), (size_of_ann, 0), (0, 0, 255), 1)
+        cv2.line(img2, (0, 0), (0, size_of_ann), (0, 0, 255), 1)
+        cv2.line(img2, (0, size_of_ann), (size_of_ann, size_of_ann), (0, 0, 255), 1)
+        cv2.line(img2, (size_of_ann, 0), (size_of_ann, size_of_ann), (0, 0, 255), 1)
         cv2.namedWindow("FoundKeyPoints", cv2.CV_WINDOW_AUTOSIZE)
         cv2.imshow("FoundKeyPoints", img2)
         cv2.waitKey(0) & 0xFF
@@ -173,6 +177,13 @@ def getPointsForAnn(keyPointsOfImage,
     max_y_i = math.floor(max_y).__int__()
     return (result_vector , (min_x_i, min_y_i), (max_x_i, max_y_i))
 
+def rotatePoints(keyPoints, degree):
+    theta = numpyLib.radians(degree)
+    c, s = numpyLib.cos(theta), numpyLib.sin(theta)
+    R = numpyLib.matrix('{} {}; {} {}'.format(c, -s, s, c))
+    points = numpyLib.matrix(keyPoints)
+    result = (points * R ).tolist()
+    return result
 
 def applyANN(size_of_ann,
          ann_net,
@@ -181,8 +192,9 @@ def applyANN(size_of_ann,
          verbose=False):
     cols = size_of_ann
     rows = size_of_ann
-    M = cv2.getRotationMatrix2D((cols / 2, rows / 2), rotation_degrees, 1)
-    temp_vector = cv2.warpAffine(result_vector, M, (cols, rows))
+    #M = cv2.getRotationMatrix2D((cols / 2, rows / 2), rotation_degrees, 1)
+    #temp_vector = cv2.warpAffine(result_vector, M, (cols, rows))
+    temp_vector = result_vector
     if verbose:
         cv2.imshow("FoundKeyPoints", temp_vector)
         cv2.waitKey(0) & 0xFF
@@ -209,14 +221,16 @@ def subAnalyzeImage(keyPoints, size_of_ann, ann_net,
         return analyzedObjects
     else:
         results = []
-        pointsForAnnTuple = getPointsForAnn(keyPoints, size_of_ann)
+        pointsForAnnTuple = getPointsForAnn(keyPoints, size_of_ann, verbose=False, verboseOriginalImage=originalImage)
         (pointsForAnn, topLeftPoint, bottomRightPoint) = pointsForAnnTuple
         (columns_start, rows_start) = topLeftPoint
         (columns_end, rows_end) = bottomRightPoint
         columns = columns_end - columns_start + 1
         rows = rows_end - rows_start + 1
         for degree in range(0, 360, 4) :
-            res = applyANN(size_of_ann, ann_net, pointsForAnn, degree)
+            rotatedPoints = rotatePoints(keyPoints, degree)
+            (rotatedPointsForAnn, _, _) = getPointsForAnn(rotatedPoints, size_of_ann, verbose=False, verboseOriginalImage=originalImage)
+            res = applyANN(size_of_ann, ann_net, rotatedPointsForAnn, degree, verbose=False)
             results.append((res, degree))
             if verbose:
                 print imagePath," result: ", res, " degree: ",degree
