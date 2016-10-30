@@ -5,6 +5,7 @@ from os import listdir
 from os.path import isfile, join
 import timeit
 import sys
+import skfuzzy as fuzz
 
 
 def getGradientPointsFromImage(image, verbose=False):
@@ -27,7 +28,7 @@ def getKeyPoints(image, getGradientPoints=True, getORBKeyPoints=True):
     img = image
     mergedPoints = []
     if getGradientPoints:
-        print "Calculating gradient points"
+        print( "Calculating gradient points")
         gradientPoints = getGradientPointsFromImage(img, verbose=True)
         mergedPoints = gradientPoints + mergedPoints
     if getORBKeyPoints:
@@ -321,6 +322,19 @@ def subAnalyzeImage(keyPoints, size_of_ann, ann_net,
                     analyzedObjects = results_bottom_right + analyzedObjects
                 return analyzedObjects
 
+def getLineObject(keyPoints):
+    lineResult = (None, None)
+    if len(keyPoints) > 0:
+        firstPoint = keyPoints[0]
+        firstX = firstPoint[0]
+        firstY = firstPoint[1]
+        pointA = max(keyPoints, key=lambda (x,y): abs(firstX - x) + abs(firstY - y))
+        firstX = pointA[0]
+        firstY = pointA[1]
+        pointB = max(keyPoints, key=lambda (x,y): abs(firstX - x) + abs(firstY - y))
+        lineResult = (pointA, pointB)
+    return lineResult
+
 def subAnalyseUsingGrid(keyPoints, size_of_ann, ann_net,
         verbose=False, originalImage=None):
     pointsForAnnTuple = getPointsForAnn(keyPoints, size_of_ann)
@@ -353,11 +367,11 @@ def analyzeImage(image, size_of_ann, ann_net, verbose = False):
     #return subAnalyzeImage(keyPoints, size_of_ann, ann_net, verbose=False, originalImage=image)
     return subAnalyseUsingGrid(keyPoints, size_of_ann, ann_net, verbose=True, originalImage=image)
 
-
+def mod_dist2(pA, pB):
+    return (abs(pA[0] - pB[0]) + abs(pA[1] - pB[1]))
 def near(point, set, distance=1):
-    def mod_dist(pA, pB):
-        return max(abs(pA[0] - pB[0]), abs(pA[1] - pB[1]))
-    return any(mod_dist(point, p) <= distance for p in set)
+
+    return any(mod_dist2(point, p) <= distance for p in set)
 
 def isPointAnExtension(x, y, pointsMatrix):
     return x >= 0 and y >= 0 and x < pointsMatrix.shape[1] and y < pointsMatrix.shape[0] and pointsMatrix[y][x] > 0.5 and pointsMatrix[y][x] < 1.5
@@ -499,6 +513,41 @@ def drawAnalyzedResults(image, results):
     cv2.destroyWindow("AnalyzedObjects")
     cv2.destroyAllWindows()
 
+def getLinesInformation(results):
+    return [getLineObject(keyPoints) for (name,
+            (probability, degree),
+            top_left_point,
+            bottom_right_point,
+            keyPoints) in results]
+
+def drawLineInformationResults(image, results):
+    cv2.destroyWindow("LinesInformation")
+    img2 = image.copy()
+    i = 0
+    for item in results:
+        i+=1
+        r = 0
+        g = 0
+        b = 0
+        if i % 3 == 0:
+            r = 200
+        if i % 3 == 1:
+            g = 200
+        if i % 3 == 2:
+            b = 200
+        (pointA, pointB) = item
+        cv2.line(img2,
+                pointA,
+                pointB,
+                (b, g, r), 2
+                )
+            
+    cv2.namedWindow("LinesInformation", cv2.CV_WINDOW_AUTOSIZE)
+    cv2.imshow("LinesInformation", img2)
+    cv2.waitKey(0) & 0xFF
+    cv2.destroyWindow("LinesInformation")
+    cv2.destroyAllWindows()
+
 
 def tryToCombineLines(results, size_of_ann, ann_net):
     onlyLines = [x for x in results if x[0] == "line"]
@@ -619,6 +668,68 @@ def combineLines(analyzedObjects,
     else:
         return analyzedLines
 
+def vector(point1, point2):
+    (x, y) = point1
+    (a, b) = point2
+    return (x - a, y - b)
+
+def EuclidianNorm(vector):
+    (x, y) = vector
+    return math.sqrt(x * x + y * y)
+
+
+
+
+
+def intersectSimple(line1, line2):
+    (pointA, pointB) = line1
+    (pointX, pointY) = line2
+    pAX = EuclidianNorm(vector(pointA, pointX))
+    pAY = EuclidianNorm(vector(pointA, pointY))
+    pBX = EuclidianNorm(vector(pointB, pointX))
+    pBY = EuclidianNorm(vector(pointB, pointY))
+    xmin = min(pAX, pBX)
+    ymin = min(pAY, pBY)
+    if(ymin < xmin):
+        return pointY
+    else:
+        return pointX
+
+def fuzzyIsSmall(value):
+    if(value < 5) :
+        return True
+    else: 
+        return False
+
+def fuzzyIsPointCloseToLine(line, point):
+    (pointA, pointB) = line
+    distA = EuclidianNorm(vector(pointA, point))
+    distB = EuclidianNorm(vector(pointB, point))
+    if (fuzzyIsSmall(distA) or fuzzyIsSmall(distB)):
+        return True
+    else:
+        return False
+
+def fuzzyIsLineSameAsVector(line, point1, point2):
+    (pointA, pointB) = line
+    dist1 = EuclidianNorm(vector(pointA, pointB))
+    dist2 = EuclidianNorm(vector(point1, point2))
+    return fuzzyIsSmall(abs(dist1 - dist2))
+    
+
+def isTriangle(line1, line2, line3):
+    PL_1_2 = intersectSimple(line1, line2)
+    PL_2_3 = intersectSimple(line2, line3)
+    PL_1_3 = intersectSimple(line1, line3)
+     
+    if fuzzyIsPointCloseToLine(line1, PL_1_2) and fuzzyIsPointCloseToLine(line1, PL_1_3) and fuzzyIsPointCloseToLine(line2, PL_2_3) and fuzzyIsLineSameAsVector(line1, PL_1_2, PL_1_3) and fuzzyIsLineSameAsVector(line2, PL_2_3, PL_1_2) and fuzzyIsLineSameAsVector(line3, PL_2_3, PL_1_3):
+        return True
+    else:
+        return False
+
+
+
+
 
 
 imagesNames = [f for f in listdir("./") if isfile(join("./", f)) and
@@ -655,9 +766,16 @@ for imagePath in imagesNames:
         size_of_ann, net)
     for line in lines:
         print line[2], line[3], len(line[4])
+    
+    transformedLines = getLinesInformation(lines)
+    print (transformedLines)
+
     elapsed = timeit.default_timer() - function_start_time
     print "time to combine lines: ", elapsed, " s"
     drawAnalyzedResults(image, results=lines)
+
+    drawLineInformationResults(image, results=transformedLines)
+    print( isTriangle(transformedLines[0], transformedLines[1], transformedLines[2]))
 
 
     #combinedObjects = tryToCombineLines(analyzedObjects, size_of_ann, net)
