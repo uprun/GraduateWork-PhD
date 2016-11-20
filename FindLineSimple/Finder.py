@@ -205,6 +205,145 @@ def applyANN(size_of_ann,
         reshape(1, size_of_ann * size_of_ann))
 
 
+
+def getAngleOfLine(lineObject):
+    (pointA, pointB) = lineObject
+    (x, y) = pointA
+    (x2, y2) = pointB
+    vX = x2 - x
+    vY = y2 - y
+    norm = EuclidianNorm((vX, vY))
+    vX /= norm
+    #vY /= norm
+    angleRad = math.acos(vX)
+    angleDegree = math.degrees(angleRad)
+    if vY < 0 :
+        angleDegree = -angleDegree
+    return angleDegree
+
+
+def subAnalyzeImageForLine(keyPoints, size_of_ann, ann_net,
+        verbose=False, splitPointsInFourParts=True, originalImage=None):
+    topLeftPoint = None
+    bottomRightPoint = None
+    analyzedObjects = []
+    if len(keyPoints) == 0:
+        analyzedObjects.append(
+                ("non_determined",
+                (1.0, 0.0),
+                topLeftPoint,
+                bottomRightPoint,
+                keyPoints
+                )
+            )
+        return analyzedObjects
+    else:
+        results = []
+        pointsForAnnTuple = getPointsForAnn(keyPoints, size_of_ann, verbose=False, verboseOriginalImage=originalImage)
+        (pointsForAnn, topLeftPoint, bottomRightPoint) = pointsForAnnTuple
+        (columns_start, rows_start) = topLeftPoint
+        (columns_end, rows_end) = bottomRightPoint
+        columns = columns_end - columns_start + 1
+        rows = rows_end - rows_start + 1
+        lineObject = getLineObject(keyPoints)
+        lineAngle = getAngleOfLine(lineObject)
+        #lineAngle = -lineAngle
+        #for degree in range(lineAngle - 5, lineAngle + 5, 1) :
+        for degree in numpyLib.linspace(lineAngle - 5, lineAngle + 5, 10) :
+            rotatedPoints = rotatePoints(keyPoints, degree)
+            (rotatedPointsForAnn, _, _) = getPointsForAnn(rotatedPoints, size_of_ann, verbose=False, verboseOriginalImage=originalImage)
+            res = applyANN(size_of_ann, ann_net, rotatedPointsForAnn, degree, verbose=False)
+            results.append((res, degree))
+            if verbose:
+                print imagePath," result: ", res, " degree: ",degree
+        maxResult = max(results,key=lambda (result,_): result)
+        (result, degree) = maxResult
+        if verbose:
+            print "Result: ", result, " degree: ",degree
+            img2 = originalImage.copy()
+            for point in keyPoints:
+                cv2.circle(
+                     img2,
+                     (point[0].__int__(), point[1].__int__()),
+                     1,
+                     (0, 255, 0))
+            cv2.rectangle(
+                   img2,
+                   topLeftPoint,
+                   bottomRightPoint,
+                   (0, 0, 255)
+                )
+            cv2.namedWindow("PointsToAnalyze", cv2.CV_WINDOW_AUTOSIZE)
+            cv2.imshow("PointsToAnalyze", img2)
+            cv2.waitKey(0) & 0xFF
+            cv2.destroyWindow("PointsToAnalyze")
+        if result >= 0.7:
+            #print "accepted as line result: ", result, " degree: ",degree
+            print '*',
+            analyzedObjects.append(
+                    ("line",
+                    maxResult,
+                    topLeftPoint,
+                    bottomRightPoint,
+                    keyPoints
+                    )
+                )
+            return analyzedObjects
+        else:
+            if rows < 5 and columns < 5:
+                analyzedObjects.append(
+                        ("non_determined",
+                        maxResult,
+                        topLeftPoint,
+                        bottomRightPoint,
+                        keyPoints
+                        )
+                    )
+                return analyzedObjects
+            else:
+                if splitPointsInFourParts:
+                    print "Not a line, result: ", result, " degree: ",degree
+                    print "Splitting points in four parts"
+                    columns_mid = (columns_start + columns_end) / 2
+                    rows_mid = (rows_start + rows_end) / 2
+                    points_top_left = [point for point in keyPoints
+                        if point[0] < columns_mid and
+                            point[1] < rows_mid]
+                    results_top_left = subAnalyzeImage(points_top_left, size_of_ann,
+                         ann_net,
+                         verbose,
+                         originalImage=originalImage)
+                    analyzedObjects = results_top_left + analyzedObjects
+                    points_top_right = [point for point in keyPoints
+                        if point[0] >= columns_mid and
+                            point[1] < rows_mid]
+                    results_top_right = subAnalyzeImage(points_top_right,
+                        size_of_ann,
+                        ann_net,
+                        verbose,
+                        originalImage=originalImage)
+                    analyzedObjects = results_top_right + analyzedObjects
+                    points_bottom_left = [point for point in keyPoints
+                        if point[0] < columns_mid and
+                            point[1] >= rows_mid]
+                    results_bottom_left = subAnalyzeImage(points_bottom_left,
+                         size_of_ann,
+                         ann_net,
+                         verbose,
+                         originalImage=originalImage)
+                    analyzedObjects = results_bottom_left + analyzedObjects
+                    points_bottom_right = [point for point in keyPoints
+                        if point[0] >= columns_mid and
+                            point[1] >= rows_mid]
+                    results_bottom_right = subAnalyzeImage(points_bottom_right,
+                        size_of_ann,
+                        ann_net,
+                        verbose,
+                        originalImage=originalImage)
+                    analyzedObjects = results_bottom_right + analyzedObjects
+                return analyzedObjects
+
+
 def subAnalyzeImage(keyPoints, size_of_ann, ann_net,
         verbose=False, splitPointsInFourParts=True, originalImage=None):
     topLeftPoint = None
@@ -459,7 +598,7 @@ def findLines(image, size_of_ann, ann_net, verbose=False):
             removedPointsMatrix[point[1]][point[0]] = 1.0
             pointsMatrix[point[1]][point[0]] = 1.0
 
-        combinedResult = subAnalyzeImage(pointsToAnalyze,
+        combinedResult = subAnalyzeImageForLine(pointsToAnalyze,
                     size_of_ann, ann_net,
                     splitPointsInFourParts=False, verbose=verbose,
                     originalImage=image)
@@ -624,7 +763,7 @@ def combineLines(analyzedObjects,
             print "Shared points: ", sharedPoints
             #drawAnalyzedResults(image, [first, line])
             if sharedPoints > 10:
-                resultAnalyzedOneLine = subAnalyzeImage(line[4] + first[4],
+                resultAnalyzedOneLine = subAnalyzeImageForLine(line[4] + first[4],
                     size_of_ann, ann_net,
                     splitPointsInFourParts=False, verbose=False,
                     originalImage=image)
@@ -775,7 +914,8 @@ for imagePath in imagesNames:
     drawAnalyzedResults(image, results=lines)
 
     drawLineInformationResults(image, results=transformedLines)
-    print( isTriangle(transformedLines[0], transformedLines[1], transformedLines[2]))
+    if len(transformedLines) >= 3:
+        print( isTriangle(transformedLines[0], transformedLines[1], transformedLines[2]))
 
 
     #combinedObjects = tryToCombineLines(analyzedObjects, size_of_ann, net)
