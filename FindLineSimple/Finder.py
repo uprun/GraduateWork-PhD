@@ -181,7 +181,7 @@ def getPointsForAnn(keyPointsOfImage,
 def rotatePoints(keyPoints, degree):
     theta = numpyLib.radians(degree)
     c, s = numpyLib.cos(theta), numpyLib.sin(theta)
-    R = numpyLib.matrix('{} {}; {} {}'.format(c, -s, s, c))
+    R = numpyLib.matrix('{} {}; {} {}'.format(c, s, -s, c))
     points = numpyLib.matrix(keyPoints)
     result = (points * R ).tolist()
     return result
@@ -247,8 +247,7 @@ def subAnalyzeImageForLine(keyPoints, size_of_ann, ann_net,
         rows = rows_end - rows_start + 1
         lineObject = getLineObject(keyPoints)
         lineAngle = getAngleOfLine(lineObject)
-        #lineAngle = -lineAngle
-        #for degree in range(lineAngle - 5, lineAngle + 5, 1) :
+        lineAngle = -lineAngle
         for degree in numpyLib.linspace(lineAngle - 5, lineAngle + 5, 10) :
             rotatedPoints = rotatePoints(keyPoints, degree)
             (rotatedPointsForAnn, _, _) = getPointsForAnn(rotatedPoints, size_of_ann, verbose=False, verboseOriginalImage=originalImage)
