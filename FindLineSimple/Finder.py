@@ -5,7 +5,8 @@ from os import listdir
 from os.path import isfile, join
 import timeit
 import sys
-import skfuzzy as fuzz
+import skfuzzy as fuzzLib
+from skfuzzy import control as ctrl
 
 
 def getGradientPointsFromImage(image, verbose=False):
@@ -16,7 +17,7 @@ def getGradientPointsFromImage(image, verbose=False):
     abs_dy = cv2.convertScaleAbs(dy)
     grad_approx = cv2.addWeighted(abs_dx, 0.5, abs_dy, 0.5, 0)
     if verbose:
-        cv2.namedWindow("gradient", cv2.CV_WINDOW_AUTOSIZE)
+        cv2.namedWindow("gradient", cv2.WINDOW_AUTOSIZE)
         cv2.imshow("gradient", grad_approx)
     averageValue = numpyLib.average(grad_approx)
     nonZeroPoints = numpyLib.nonzero(grad_approx > averageValue * 0.95)
@@ -32,7 +33,7 @@ def getKeyPoints(image, getGradientPoints=True, getORBKeyPoints=True):
         gradientPoints = getGradientPointsFromImage(img, verbose=True)
         mergedPoints = gradientPoints + mergedPoints
     if getORBKeyPoints:
-        print "Calculating ORB points"
+        print ("Calculating ORB points")
         # Initiate STAR detector
         orb = cv2.ORB(1800)
         # find the keypoints with ORB
@@ -169,7 +170,7 @@ def getPointsForAnn(keyPointsOfImage,
         cv2.line(img2, (0, 0), (0, size_of_ann), (0, 0, 255), 1)
         cv2.line(img2, (0, size_of_ann), (size_of_ann, size_of_ann), (0, 0, 255), 1)
         cv2.line(img2, (size_of_ann, 0), (size_of_ann, size_of_ann), (0, 0, 255), 1)
-        cv2.namedWindow("FoundKeyPoints", cv2.CV_WINDOW_AUTOSIZE)
+        cv2.namedWindow("FoundKeyPoints", cv2.WINDOW_AUTOSIZE)
         cv2.imshow("FoundKeyPoints", img2)
         cv2.waitKey(0) & 0xFF
     min_x_i = math.floor(min_x).__int__()
@@ -213,6 +214,8 @@ def getAngleOfLine(lineObject):
     vX = x2 - x
     vY = y2 - y
     norm = EuclidianNorm((vX, vY))
+    if norm == 0:
+        return 0
     vX /= norm
     #vY /= norm
     angleRad = math.acos(vX)
@@ -254,11 +257,11 @@ def subAnalyzeImageForLine(keyPoints, size_of_ann, ann_net,
             res = applyANN(size_of_ann, ann_net, rotatedPointsForAnn, degree, verbose=False)
             results.append((res, degree))
             if verbose:
-                print imagePath," result: ", res, " degree: ",degree
-        maxResult = max(results,key=lambda (result,_): result)
+                print( imagePath," result: ", res, " degree: ",degree)
+        maxResult = max(results,key=lambda x: x[0])
         (result, degree) = maxResult
         if verbose:
-            print "Result: ", result, " degree: ",degree
+            print ("Result: ", result, " degree: ",degree)
             img2 = originalImage.copy()
             for point in keyPoints:
                 cv2.circle(
@@ -272,13 +275,13 @@ def subAnalyzeImageForLine(keyPoints, size_of_ann, ann_net,
                    bottomRightPoint,
                    (0, 0, 255)
                 )
-            cv2.namedWindow("PointsToAnalyze", cv2.CV_WINDOW_AUTOSIZE)
+            cv2.namedWindow("PointsToAnalyze", cv2.WINDOW_AUTOSIZE)
             cv2.imshow("PointsToAnalyze", img2)
             cv2.waitKey(0) & 0xFF
             cv2.destroyWindow("PointsToAnalyze")
         if result >= 0.7:
             #print "accepted as line result: ", result, " degree: ",degree
-            print '*',
+            print ('*',)
             analyzedObjects.append(
                     ("line",
                     maxResult,
@@ -301,8 +304,8 @@ def subAnalyzeImageForLine(keyPoints, size_of_ann, ann_net,
                 return analyzedObjects
             else:
                 if splitPointsInFourParts:
-                    print "Not a line, result: ", result, " degree: ",degree
-                    print "Splitting points in four parts"
+                    print( "Not a line, result: ", result, " degree: ",degree)
+                    print ( "Splitting points in four parts")
                     columns_mid = (columns_start + columns_end) / 2
                     rows_mid = (rows_start + rows_end) / 2
                     points_top_left = [point for point in keyPoints
@@ -372,11 +375,11 @@ def subAnalyzeImage(keyPoints, size_of_ann, ann_net,
             res = applyANN(size_of_ann, ann_net, rotatedPointsForAnn, degree, verbose=False)
             results.append((res, degree))
             if verbose:
-                print imagePath," result: ", res, " degree: ",degree
-        maxResult = max(results,key=lambda (result,_): result)
+                print( imagePath," result: ", res, " degree: ",degree)
+        maxResult = max(results,key=lambda x: x[0])
         (result, degree) = maxResult
         if verbose:
-            print "Result: ", result, " degree: ",degree
+            print ("Result: ", result, " degree: ",degree)
             img2 = originalImage.copy()
             for point in keyPoints:
                 cv2.circle(
@@ -390,13 +393,13 @@ def subAnalyzeImage(keyPoints, size_of_ann, ann_net,
                    bottomRightPoint,
                    (0, 0, 255)
                 )
-            cv2.namedWindow("PointsToAnalyze", cv2.CV_WINDOW_AUTOSIZE)
+            cv2.namedWindow("PointsToAnalyze", cv2.WINDOW_AUTOSIZE)
             cv2.imshow("PointsToAnalyze", img2)
             cv2.waitKey(0) & 0xFF
             cv2.destroyWindow("PointsToAnalyze")
         if result >= 0.7:
             #print "accepted as line result: ", result, " degree: ",degree
-            print '*',
+            print ('*',)
             analyzedObjects.append(
                     ("line",
                     maxResult,
@@ -419,8 +422,8 @@ def subAnalyzeImage(keyPoints, size_of_ann, ann_net,
                 return analyzedObjects
             else:
                 if splitPointsInFourParts:
-                    print "Not a line, result: ", result, " degree: ",degree
-                    print "Splitting points in four parts"
+                    print( "Not a line, result: ", result, " degree: ",degree)
+                    print( "Splitting points in four parts")
                     columns_mid = (columns_start + columns_end) / 2
                     rows_mid = (rows_start + rows_end) / 2
                     points_top_left = [point for point in keyPoints
@@ -466,10 +469,10 @@ def getLineObject(keyPoints):
         firstPoint = keyPoints[0]
         firstX = firstPoint[0]
         firstY = firstPoint[1]
-        pointA = max(keyPoints, key=lambda (x,y): abs(firstX - x) + abs(firstY - y))
+        pointA = max(keyPoints, key=lambda point: abs(firstX - point[0]) + abs(firstY - point[1]))
         firstX = pointA[0]
         firstY = pointA[1]
-        pointB = max(keyPoints, key=lambda (x,y): abs(firstX - x) + abs(firstY - y))
+        pointB = max(keyPoints, key=lambda point: abs(firstX - point[0]) + abs(firstY - point[1]))
         lineResult = (pointA, pointB)
     return lineResult
 
@@ -580,7 +583,7 @@ def findLines(image, size_of_ann, ann_net, verbose=False):
     for pointToStartFrom in remainingPoints:
         if(removedPointsMatrix[pointToStartFrom[1]][pointToStartFrom[0]] > 0.5):
             continue
-        print '.',
+        print( '.',)
         sys.stdout.flush()
         #start_time = timeit.default_timer()
         pointsToAnalyze = enlargeSetByNearPointsForSize(
@@ -607,7 +610,7 @@ def findLines(image, size_of_ann, ann_net, verbose=False):
         #elapsed = timeit.default_timer() - start_time
         #print "findLines iteration time: ", elapsed
     elapsed = timeit.default_timer() - function_start_time
-    print "findLines total time: ", elapsed
+    print( "findLines total time: ", elapsed)
     return result
 
 
@@ -645,7 +648,7 @@ def drawAnalyzedResults(image, results):
                     1,
                     (b, g, r)
                     )
-    cv2.namedWindow("AnalyzedObjects", cv2.CV_WINDOW_AUTOSIZE)
+    cv2.namedWindow("AnalyzedObjects", cv2.WINDOW_AUTOSIZE)
     cv2.imshow("AnalyzedObjects", img2)
     cv2.waitKey(0) & 0xFF
     cv2.destroyWindow("AnalyzedObjects")
@@ -680,7 +683,7 @@ def drawLineInformationResults(image, results):
                 (b, g, r), 2
                 )
             
-    cv2.namedWindow("LinesInformation", cv2.CV_WINDOW_AUTOSIZE)
+    cv2.namedWindow("LinesInformation", cv2.WINDOW_AUTOSIZE)
     cv2.imshow("LinesInformation", img2)
     cv2.waitKey(0) & 0xFF
     cv2.destroyWindow("LinesInformation")
@@ -759,7 +762,7 @@ def combineLines(analyzedObjects,
         foundOnePair = False
         for line in rest:
             sharedPoints = drawLineAndCountSharedPoints(pointsMatrix, line[4])
-            print "Shared points: ", sharedPoints
+            print( "Shared points: ", sharedPoints)
             #drawAnalyzedResults(image, [first, line])
             if sharedPoints > 10:
                 resultAnalyzedOneLine = subAnalyzeImageForLine(line[4] + first[4],
@@ -769,12 +772,12 @@ def combineLines(analyzedObjects,
                 resultAnalyzedOneLine = [x for x in resultAnalyzedOneLine
                     if x[0] == "line"]
                 if len(resultAnalyzedOneLine) == 0:
-                    print "Not merged , because pair is not a line"
+                    print( "Not merged , because pair is not a line")
                     clearLine(pointsMatrix, line[4])
                     toAnalyzeFuther.append(line)
                 else:
-                    print "Merged, because ",
-                    print "count of lines found: ", len(resultAnalyzedOneLine)
+                    print( "Merged, because ",)
+                    print( "count of lines found: ", len(resultAnalyzedOneLine) )
                     (topLeft, bottomRight) = enlargeBoundingRectangle(
                         line[4],
                         first[2][0],
@@ -793,7 +796,7 @@ def combineLines(analyzedObjects,
                         )
                     foundOnePair = True
             else:
-                print "Not merged"
+                print( "Not merged")
                 clearLine(pointsMatrix, line[4])
                 toAnalyzeFuther.append(line)
         clearLine(pointsMatrix, first[4])
@@ -833,26 +836,49 @@ def intersectSimple(line1, line2):
     else:
         return pointX
 
-def fuzzyIsSmall(value):
-    if(value < 5) :
-        return True
-    else: 
-        return False
+def fuzzyIsSmallPercentage(percentsToCheck):
+    x = numpyLib.arange(0, 101, 1)
+    percentage = ctrl.Antecedent(x, 'percentage')
+    percentage['small'] = fuzzLib.gaussmf(x, 0, 7 )
+    percentsToCheck = min(abs(percentsToCheck), 100.0)
+    return percentsToCheck < 6
 
 def fuzzyIsPointCloseToLine(line, point):
     (pointA, pointB) = line
     distA = EuclidianNorm(vector(pointA, point))
     distB = EuclidianNorm(vector(pointB, point))
-    if (fuzzyIsSmall(distA) or fuzzyIsSmall(distB)):
-        return True
-    else:
-        return False
+    normalDistance = 100
+    percentageA_value = min(100 * distA / normalDistance, 100.0)
+    percentageB_value = min(100 * distB / normalDistance, 100.0)
+    percentageA = ctrl.Antecedent(numpyLib.arange(0, 101, 1), 'percentageA')
+    percentageA['small'] = fuzzLib.gaussmf(percentageA.universe, 0, 10 )
+    percentageB = ctrl.Antecedent(numpyLib.arange(0, 101, 1), 'percentageB')
+    percentageB['small'] = fuzzLib.gaussmf(percentageB.universe, 0, 10 )
+    similarity = ctrl.Consequent(numpyLib.arange(0, 10, 1), 'similarity')
+    similarity['low'] = fuzzLib.trimf(similarity.universe, [0, 0, 5])
+    similarity['medium'] = fuzzLib.trimf(similarity.universe, [0, 5, 10])
+    similarity['high'] = fuzzLib.trimf(similarity.universe, [5, 10, 10])
+    rule1 = ctrl.Rule(percentageA['small'] | percentageB['small'], similarity['high'])
+    rule2 = ctrl.Rule(~percentageA['small'] & ~percentageB['small'], similarity['low'])
+    
+    rule1.view()
+    similarity_ctrl = ctrl.ControlSystem([rule1, rule2])
+    similarity_simulation = ctrl.ControlSystemSimulation(similarity_ctrl)
+
+    similarity_simulation.input['percentageA'] = percentageA_value
+    similarity_simulation.input['percentageB'] = percentageB_value
+    similarity_simulation.compute()
+    print (similarity_simulation.output['similarity'])
+    similarity.view(sim=similarity_simulation)
+
+    return similarity_simulation.output['similarity'] > 6.5
 
 def fuzzyIsLineSameAsVector(line, point1, point2):
     (pointA, pointB) = line
     dist1 = EuclidianNorm(vector(pointA, pointB))
     dist2 = EuclidianNorm(vector(point1, point2))
-    return fuzzyIsSmall(abs(dist1 - dist2))
+    normalDistance = 100
+    return fuzzyIsSmallPercentage(abs(dist1 - dist2) * 100 / normalDistance)
     
 
 def isTriangle(line1, line2, line3):
@@ -876,13 +902,13 @@ learningImages = [f for f in imagesNames
                     if f.startswith("success_") or
                          f.startswith("failure_")]
 
-print imagesNames
+print( imagesNames)
 
 
 
 size_of_ann = 40
 count_of_images = len(learningImages)
-print count_of_images
+print( count_of_images)
 
 import pickle
 from ffnet import loadnet
@@ -891,8 +917,8 @@ net = loadnet("line.net")
 print("Starting testing:")
 # Test
 for imagePath in imagesNames:
-    print "path: ", imagePath
-    image = cv2.imread(imagePath, cv2.CV_LOAD_IMAGE_COLOR)
+    print( "path: ", imagePath)
+    image = cv2.imread(imagePath, cv2.IMREAD_COLOR)
     analyzedObjects = findLines(image, size_of_ann, net, verbose=False)
     drawAnalyzedResults(image, results=analyzedObjects)
     #for d in analyzedObjects:
@@ -903,13 +929,13 @@ for imagePath in imagesNames:
     lines = combineLines(analyzedObjects, [], pointsMatrix, image,
         size_of_ann, net)
     for line in lines:
-        print line[2], line[3], len(line[4])
+        print( line[2], line[3], len(line[4]))
     
     transformedLines = getLinesInformation(lines)
     print (transformedLines)
 
     elapsed = timeit.default_timer() - function_start_time
-    print "time to combine lines: ", elapsed, " s"
+    print ("time to combine lines: ", elapsed, " s")
     drawAnalyzedResults(image, results=lines)
 
     drawLineInformationResults(image, results=transformedLines)
